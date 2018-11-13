@@ -1,0 +1,264 @@
+# Add sys start and sys end at the end of each iteration. 
+# 8:45
+# Add for each survey that I am working on: Write a .csv file with presence absence
+# ROC 
+# Glowing Puffleg
+# White-sided hillstar
+srun -p  interactive --mem-per-cpu 32768 -t 04:00:00 --pty bash
+R
+rm(list=ls())
+require(tidyverse)
+require(plyr)
+require(dplyr)
+require(sf)
+require(sp)
+require(rgeos)
+require(rgdal)
+require(raster)
+require(cmsdm)
+require(MOLSDM)
+require(svMisc)
+# @ !!!! NEED TO CONVERT TO SAME LAMBERT EQUAL AREA AS MY HUMMINGBIR DSDMS I THINK!
+# --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+# Inputs for funcitons within the for loop:
+# Load dependencies and prepare paths for SDMs ####
+# source('/Users/diegoellis/Desktop/Hummingbird_checklist/Code/Hum_checklists/SDM_richness_comparing_checklists.R')
+if(( Sys.info()[['user']] == 'diegoellis' )  == TRUE){
+  message('Working locally')
+  source('/Users/diegoellis/Desktop/Hummingbird_checklist/Code/Hum_checklists/SDM_richness_comparing_checklists.R')
+  source('/Users/diegoellis/Desktop/Hummingbird_checklist/Code/Hum_checklists/buffered_inventory_species_richness_comparison.R')
+  source('/Users/diegoellis/Desktop/Hummingbird_checklist/Code/Hum_checklists/False_Absences_inventory.R')
+  source('/Users/diegoellis/Desktop/Hummingbird_checklist/Code/Hum_checklists/False_Absences_False_presences.R')
+  hums_with_SDMs <- gsub('_maps_v1.pdf','', list.files('/Users/diegoellis/Dropbox/Diego_Cory_Walter/Hummingbirds_AccuratePts_4_9_18/All_species/v26_All_hummingbird_SDM_Figures/'))
+  SDM_figures = hums_with_SDMs
+  env =raster('/Users/diegoellis/Desktop/Hummingbirds/Elev_Hummingbirdsv39_inputs/Env/Resampled_chelsa.tif')  
+  load('/Users/diegoellis/Desktop/Hummingbirds/Rarity_hummingbird/dirs.rdata')
+  allBaseDirs = lapply(allBaseDirs, function(x){
+    gsub('/project/fas/jetz/data/Hummingbirds/New_try//v26/', '/Users/diegoellis/Desktop/Hummingbirds/Rarity_hummingbird/', x) # Change the second line to whereever you are putting the Statistic and Maxent folder. 
+  })
+  allBaseDirs = lapply(allBaseDirs, function(x){
+    gsub('/project/fas/jetz/data/Hummingbirds/New_try/v26_inputs/', '/Users/diegoellis/Dropbox/Diego_Cory_Walter/Hummingbirds_AccuratePts_4_9_18/Inputs/', x) # Change the second line to whereever you are putting the Statistic and Maxent folder. 
+  })  
+  myPath='/Users/diegoellis/Desktop/Hummingbird_half_earth/'
+  myPath='/Users/diegoellis/Desktop/Hummingbirds/Rarity_hummingbird/'
+  oldPath='/project/fas/jetz/data/Hummingbirds/New_try//v26/'
+  indir = '/Users/diegoellis/Desktop/Hummingbird_checklist/Juan_parra_checklists/'
+  survey_sites <- read.csv(paste0(indir, 'Sites_8Feb2011.csv'))
+  survey_species <- read.csv(paste0(indir, 'SpeciesxSite8Feb2011.csv'))
+  path_to_shapefile_EM = '/Users/diegoellis/Dropbox/Diego_Cory_Walter/Hummingbirds_AccuratePts_4_9_18/All_species/Expermap_shp_projected/'
+}
+
+if((Sys.info()[['user']] == 'de293')  == TRUE){
+  message('Working on HPC')
+  source('/project/fas/jetz/data/diego/Hummingbirds/Survey_Data/code/SDM_richness_comparing_checklists.R')
+  hums_with_SDMs <- gsub('_maps_v1.pdf','', list.files('/project/fas/jetz/data/Hummingbirds/New_try/v26/Figures/'))
+  SDM_figures = hums_with_SDMs
+  env =raster('/project/fas/jetz/data/Hummingbirds/New_try/v26_inputs/Env/Resampled_chelsa.tif')  
+  load('/project/fas/jetz/data/Hummingbirds/New_try/v26_inputs/dirs.rdata')
+  indir = 'project/fas/jetz/data/diego/Hummingbirds/Survey_Data/code/Juan_parra_checklists/'
+  survey_sites <- read.csv('/project/fas/jetz/data/diego/Hummingbirds/Survey_Data/code/Juan_parra_checklists/Sites_8Feb2011.csv')
+  survey_species <- read.csv('/project/fas/jetz/data/diego/Hummingbirds/Survey_Data/code/Juan_parra_checklists/SpeciesxSite8Feb2011.csv')
+  path_to_shapefile_EM = '/project/fas/jetz/data/Hummingbirds/Expert_Shp_Projected/'
+}
+
+version='26'
+myPath=NULL
+oldPath=NULL
+oldPath='/project/fas/jetz/data/Hummingbirds/New_try//v26/'
+myPath='/Users/diegoellis/Desktop/Hummingbirds/Rarity_hummingbird/'
+
+survey_species= survey_species[,c(1:2,5)]
+survey_jp = left_join(survey_sites, survey_species)
+# Create total species richness (true presence) and true absences of the survey
+survey_jp <- ddply(survey_jp, 'Communities_IDComm' ,mutate, # Apply the mutate function 
+                   N.species_survey_true = length(unique(Spname)), # Create new variables
+                   N.species_survey_abs = 276 - N.species_survey_true  ) # For each survey
+# head(survey_jp, 14)
+df = data.frame(matrix(NA, length(unique(survey_jp$Communities_IDComm)), 16))
+names(df) <- c('Survey_ID', 
+               'N.species_survey_true', 'True_pres_EMELEV', 'True_pres_EMNOELEV', 'True_pres_NOEMELEV', 'True_pres_NOEMNOELEV',
+               'N.species_survey_abs', 'True_abs__EMELEV', 'True_abs_EMNOELEV', 'True_abs_NOEMELEV', 'True_abs_NOEMNOELEV',
+               'N.species_total_richness', 'tot_rich_EMELEV', 'tot_rich_EMNOELEV', 'tot_rich_NOEMELEV', 'tot_rich_NOEMNOELEV')
+
+df$Survey_ID <- ddply(survey_jp, 'Communities_IDComm' ,function(x){
+  Survey_ID = unique(x$Communities_IDComm)
+  data.frame(Survey_ID = Survey_ID)
+} )[2]
+
+df$N.species_survey_true <- ddply(survey_jp, 'Communities_IDComm' ,function(x){
+  N.species_survey_true = length(unique(x$Spname))
+  data.frame(N.species_survey_true = N.species_survey_true)
+})[2] # Get the species richness. 
+
+df$N.species_survey_abs = 276 - df$N.species_survey_true # 276 hummingbirds with SDMs
+Random_survey <- subset(survey_jp, Communities_IDComm == 2)
+sub = Random_survey
+print(paste0(unique(Random_survey$CommunityName)))
+survey_make_shp_and_raster(sub)
+env = crop(env, total.rs) # IMPORTANT STEP!!! 
+richnessFile=NULL
+j = 2
+
+
+# survey_jp[survey_jp$CommunityName == 'Minga',]
+
+first_ten = unique(survey_jp$Communities_IDComm)[114:433]
+
+
+survey_jp %>% subset(Communities_IDComm ==  249) %>% dplyr::select(CommunityName)
+
+#  for(j in unique(survey_jp$Communities_IDComm)){
+#    progress(j, progress.bar = TRUE)
+
+# cl <- makeCluster(4)
+# registerDoParallel(cl) 
+# foreach
+
+
+# do the sorting -----------------------------------------
+if(!doParallel){
+  for (i in 1:length(sp.src)) {internalFunction(i)} 
+}
+#registerDoParallel(4)
+if(doParallel){
+  foreach(i = 1:length(sp.src)) %dopar% {internalFunction(i)} 
+}
+run.times=proc.time()-startDate
+print(paste0("Finished sorting all species in: ",run.times[3]))
+
+
+}
+
+
+foreach(j = 1:)
+foreach(j = 1:)
+
+
+# for(j in unique(survey_jp$Communities_IDComm)){
+# for(j in first_ten){
+  progress(j, progress.bar = TRUE)
+  print(paste0('Working with survey ID ', j))
+  sub <- subset(survey_jp, Communities_IDComm == j)
+  print(paste0(unique(sub$CommunityName)))
+  survey_make_shp_and_raster(sub)
+  # For each survey: We create a data frame
+  # Type: SDM_type Species: Amazilia tzacatl # True Presence 0,1 True Absence 0,1  # False Presence 0,1 False Absence 0,1
+  survey_data_frame = data.frame(matrix(NA,
+                                        length(SDM_figures),
+                                        20
+  ))
+  # TP=True Presence   # TA=True Absence # FP = False Presence # FA = False Absence
+  names(survey_data_frame) = c('Survey_ID', 'Species',
+                               'TP_Survey', 'TA_Survey',
+                               'TP_EM_NOELEV', 'TA_EM_NOELEV','FP_EM_NOELEV', 'FA_EM_NOELEV',
+                               'TP_EM_ELEV', 'TA_EM_ELEV','FP_EM_ELEV', 'FA_EM_ELEV',
+                               'TP_NOEM_NOELEV', 'TA_NOEM_NOELEV','FP_NOEM_NOELEV', 'FA_NOEM_NOELEV',
+                               'TP_NOEM_ELEV', 'TA_NOEM_ELEV','FP_NOEM_ELEV', 'FA_NOEM_ELEV'
+  )
+  # survey_data_frame = data.frame( Survey_ID =  print(paste0(unique(sub$CommunityName))),
+  # Fill the dataframe for the survey with True Presences
+  survey_data_frame$Survey_ID = print(paste0(unique(sub$CommunityName)))
+  survey_data_frame$Species = SDM_figures
+  survey_data_frame$TP_Survey <- 0
+  survey_data_frame$TP_Survey[survey_data_frame$Species %in% sub$Spname] =  1
+  # make a buffer of 500km around the survey and get the species list of that buffered survey: # 1 is a presence , 0 is an absence
+  print('Making a 500km buffer around my survey:')
+  with_in_m = 500 * 1000 # with_in_m = 250 * 1000
+  sub_500kmB = gBuffer(sub, width = with_in_m, byid = TRUE)
+  print('Getting species list for species within this survey: Overlap rangemaps and this shapefile')
+  all_sp_with_shp_EM = paste0(path_to_shapefile_EM, SDM_figures, '.shp')
+  sp_list_within_500kmB = NULL
+  df_sp_list_within_500kmB = data.frame(matrix(NA, length(all_sp_with_shp_EM), 3))
+  names(df_sp_list_within_500kmB) = c('Species', 'Pres_Abs', 'Survey_ID')
+  df_sp_list_within_500kmB$Species <- gsub('.shp','', basename(all_sp_with_shp_EM))
+  df_sp_list_within_500kmB$Survey_ID = paste0(unique(sub$CommunityName))
+  for(x in unique(all_sp_with_shp_EM)){
+    print(x)
+    s_tmp = readOGR(x)
+    nuts_over1 = over(s_tmp, sub_500kmB, returnList = TRUE)
+    if( length(unlist(nuts_over1)) > 0 ){
+      message(paste0( paste0(unique(s_tmp$SCIENTIFIC)), ' YES intersect with 500km buffered survey ', print(paste0(unique(sub$CommunityName)))))
+      
+      df_sp_list_within_500kmB[df_sp_list_within_500kmB$Species == gsub(' ', '_', paste0(unique(s_tmp$SCIENTIFIC))) ,]$Pres_Abs <-   1
+    }else{
+      df_sp_list_within_500kmB[df_sp_list_within_500kmB$Species == gsub(' ', '_', paste0(unique(s_tmp$SCIENTIFIC))) ,]$Pres_Abs <-   0
+      message( paste0(unique(s_tmp$SCIENTIFIC)), ' did NOT intersect with 500km buffered survey ', print(paste0(unique(sub$CommunityName))) )
+    }
+  }
+  # All species that occur within 500km of the survey.
+  # survey_data_frame$TP_Survey[survey_data_frame$Species %in% sub$Spname] =  1
+  df_sp_list_within_500kmB_for_true_abs = df_sp_list_within_500kmB %>% subset(Pres_Abs == 1)
+  TRUE_ABSENCES_IN_SURVEY  =df_sp_list_within_500kmB_for_true_abs[!df_sp_list_within_500kmB_for_true_abs$Species %in% sub$Spname,] # The species that are witihn the 1km survey are NOT true absences for sure
+  survey_data_frame$TA_Survey[survey_data_frame$Species %in% sub$Spname] =  0
+  # The species that are NOT recorded in the 1km survey but were recorded around 500km of this survey are TRUE absences
+  survey_data_frame$TA_Survey[survey_data_frame$Species %in% TRUE_ABSENCES_IN_SURVEY$Species] =  1
+
+  df_sp_list_within_500kmB = df_sp_list_within_500kmB %>% subset(Pres_Abs == 1)
+  # df_sp_list_within_500kmB # This is all species that ocurred within the buffer -> I need to only take those as absence that were not included in the survey. These are my true absences!
+  write.csv(survey_data_frame, file = paste0('/Users/diegoellis/Desktop/Inventory_sp_list/Inventory_post_debug/',paste0(unique(sub$CommunityName)), '.csv'))
+  inventory_dataset_csv = paste0('/Users/diegoellis/Desktop/Inventory_sp_list/Inventory_post_debug/',paste0(unique(sub$CommunityName)), '.csv')
+  # Only 1 is presence in the 500km buffer
+  df_sp_list_within_500kmB = df_sp_list_within_500kmB %>% subset(Pres_Abs == 1)
+  # Now that we have the extended species list of what is in a 500km radius of this 
+  # survey_data_frame$TA_Survey  # We make that later
+  # Add survey_data_frame as an input: At the end of the function: Save again as a .csv at the beginning of the function load the .csv add new data then save it.
+  # TODO ADD SURVEY DATA FRAME INTO EACH FUNCTION!  ####
+  ch_sp_list=sub$Spname
+  subset_ch = sub
+  df[df$Survey_ID == j,]$True_pres_EMNOELEV = richness_EM_NOELEV_overlap_with_checklist(allBaseDirs,NULL,NULL,myPath,oldPath,NULL,ch_sp_list=sub$Spname,subset_ch = sub,total.rs = total.rs, inventory_dataset_csv = inventory_dataset_csv)
+  df[df$Survey_ID == j,]$True_pres_EMELEV = richness_EM_ELEV_overlap_with_checklist(allBaseDirs,NULL,NULL,myPath,oldPath,NULL,ch_sp_list=sub$Spname,subset_ch = sub,total.rs = total.rs, inventory_dataset_csv = inventory_dataset_csv)
+  df[df$Survey_ID == j,]$True_pres_NOEMNOELEV = richness_NOEM_NOELEV_overlap_with_checklist(allBaseDirs,NULL,NULL,myPath,oldPath,NULL,ch_sp_list=sub$Spname,subset_ch = sub,total.rs = total.rs, inventory_dataset_csv = inventory_dataset_csv)
+  df[df$Survey_ID == j,]$True_pres_NOEMELEV = richness_NOEM_ELEV_overlap_with_checklist(allBaseDirs,NULL,NULL,myPath,oldPath,NULL,ch_sp_list=sub$Spname,subset_ch = sub,total.rs = total.rs, inventory_dataset_csv = inventory_dataset_csv)
+  # Modify the total presence and the total absence functions!!!!
+  # Of the Hummingbirds found within a 500km buffer find the total number of species predicted by each SDM type
+  # We assume that SDMs without expert maps to predict way more species than SDMs without Expert maps
+  # Now ch_sp_list is actually the species list of hummingbirds ocurring within a 500km buffer
+  # TRUE ABSENCE IS: SPECIES LIST FROM 500km of the survey - SPECIES RECORDED IN THE INVENTORY:
+  # Add Survey data frame to total richness ####
+  message('Calculating total species richness')
+  ch_sp_list_B = df_sp_list_within_500kmB$Species
+  buffered_survey = sub_500kmB
+  # FALSE PRESENCES:
+  medium_step_for_FP_FA_sub_EM_NOELEV(allBaseDirs,myPath,oldPath,ch_sp_list_B,sub,inventory_dataset_csv)
+  medium_step_for_FP_FA_sub_EM_ELEV(allBaseDirs,myPath,oldPath,ch_sp_list_B,sub,inventory_dataset_csv)
+  medium_step_for_FP_FA_sub_NOEM_NOELEV(allBaseDirs,myPath,oldPath,ch_sp_list_B,sub,inventory_dataset_csv)
+  medium_step_for_FP_FA_sub_NOEM_ELEV(allBaseDirs,myPath,oldPath,ch_sp_list_B,sub,inventory_dataset_csv)
+  # TRUE ABSENCES - FALSE PRESENCES OF SDMS
+  survey_data_frame = read.csv(inventory_dataset_csv)
+  TRUE_ABSENCES_SURVEY = survey_data_frame %>% subset(TA_Survey == 1) %>% dplyr::select(Species)
+  TRUE_ABSENCES_SURVEY =  TRUE_ABSENCES_SURVEY$Species
+  
+  survey_data_frame$TA_EM_ELEV <- 0
+  survey_data_frame$TA_EM_NOELEV <- 0
+  survey_data_frame$TA_NOEM_ELEV <- 0
+  survey_data_frame$TA_NOEM_NOELEV <- 0
+  fp_EM_ELEV = survey_data_frame %>% subset(FP_EM_ELEV == 1) %>% dplyr::select(Species)
+  fp_EM_NOELEV = survey_data_frame %>% subset(FP_EM_NOELEV == 1) %>% dplyr::select(Species)
+  fp_NOEM_ELEV = survey_data_frame %>% subset(FP_NOEM_ELEV == 1) %>% dplyr::select(Species)
+  fp_NOEM_NOELEV = survey_data_frame %>% subset(FP_NOEM_NOELEV == 1) %>% dplyr::select(Species)
+  
+  fp_EM_ELEV = fp_EM_ELEV$Species
+  fp_EM_NOELEV = fp_EM_NOELEV$Species
+  fp_NOEM_ELEV = fp_NOEM_ELEV$Species
+  fp_NOEM_NOELEV = fp_NOEM_NOELEV$Species
+  # TRUE ABSENCES THAT ARE NOT CONTAINED IN THE FALSE PRESENCES
+  True_absences_in_SDM_EM_ELEV = TRUE_ABSENCES_SURVEY[ ! TRUE_ABSENCES_SURVEY %in% fp_EM_ELEV]
+  survey_data_frame$TA_EM_ELEV[survey_data_frame$Species %in% True_absences_in_SDM_EM_ELEV] = 1
+  True_absences_in_SDM_EM_NOELEV = TRUE_ABSENCES_SURVEY[ ! TRUE_ABSENCES_SURVEY %in% fp_EM_NOELEV]
+  survey_data_frame$TA_EM_NOELEV[survey_data_frame$Species %in% True_absences_in_SDM_EM_NOELEV] = 1
+  True_absences_in_SDM_NOEM_ELEV = TRUE_ABSENCES_SURVEY[ ! TRUE_ABSENCES_SURVEY %in% fp_NOEM_ELEV]
+  survey_data_frame$TA_NOEM_ELEV[survey_data_frame$Species %in% True_absences_in_SDM_NOEM_ELEV] = 1
+  True_absences_in_SDM_NOEM_NOELEV = TRUE_ABSENCES_SURVEY[ ! TRUE_ABSENCES_SURVEY %in% fp_NOEM_NOELEV]
+  survey_data_frame$TA_NOEM_NOELEV[survey_data_frame$Species %in% True_absences_in_SDM_NOEM_NOELEV] = 1
+  write.csv(survey_data_frame, file = inventory_dataset_csv)
+  # FALSE ABSENCES: WILL THERE BE ANY?
+  find_false_absence_EM_ELEV(allBaseDirs,myPath,oldPath,SDM_figures,buffered_survey,inventory_dataset_csv)
+  find_false_absence_EM_NOELEV(allBaseDirs,myPath,oldPath,SDM_figures,buffered_survey,inventory_dataset_csv)
+  find_false_absence_NOEM_ELEV(allBaseDirs,myPath,oldPath,SDM_figures,buffered_survey,inventory_dataset_csv)
+  find_false_absence_NOEM_NOELEV(allBaseDirs,myPath,oldPath,SDM_figures,buffered_survey,inventory_dataset_csv)
+  
+  # a = read.csv(inventory_dataset_csv)
+  # colSums(a[,-1:-17], na.rm =T)
+  # 
+  # From the buffered survey try to intersect with each SDM (only suitable habitat and see if false absences are larger than with Expert Maps alone).
+ }
