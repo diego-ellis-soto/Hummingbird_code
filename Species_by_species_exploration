@@ -1,0 +1,119 @@
+# Have a loop that runs this plot for each unique humingbird species
+library(gapminder)
+library(magrittr)
+library(ggplot2)
+require(plyr)
+require(dplyr)
+require(reshape2)
+require(gridExtra)
+
+
+plot_TSS_FPR_FAR_KAPPA_per_species = function(species,df, outdir){
+  sp = df %>% subset(Species == species)  
+  # sp_tmp =   apply( sp[5:20], 2, sum, na.rm=T)
+  
+  sp_tmp = sp %>% summarise_if(is.integer, sum, na.rm = TRUE) %>% dplyr::select(-TA_Survey, -TP_Survey)
+  
+  # sensitivity: TP/TP+FA
+  sensitivity_EM_ELEV = sp_tmp[5] / ( sp_tmp[5] + sp_tmp[8] ) # sp_tmp[5] / ( sp_tmp[5] + sp_tmp[8] )
+  sensitivity_EM_NOELEV = sp_tmp[1] / ( sp_tmp[1] + sp_tmp[4] )
+  sensitivity_NOEM_ELEV = sp_tmp[13] / ( sp_tmp[13] + sp_tmp[16] )
+  sensitivity_NOEM_NOELEV = sp_tmp[9] / ( sp_tmp[9] + sp_tmp[12] )
+  # specificity  TA / TA + FP
+  specificity_EM_ELEV = sp_tmp[6] / ( sp_tmp[6] + sp_tmp[7] )
+  specificity_EM_NOELEV = sp_tmp[2] / ( sp_tmp[2] + sp_tmp[3] )
+  specificity_NOEM_ELEV = sp_tmp[14] / ( sp_tmp[14] + sp_tmp[15] )
+  specificity_NOEM_NOELEV =  sp_tmp[10] / ( sp_tmp[10] + sp_tmp[11] )
+  # SPP
+  sp1 = data.frame(
+    specificity_EM_ELEV = specificity_EM_ELEV,
+    specificity_EM_NOELEV = specificity_EM_NOELEV,
+    specificity_NOEM_ELEV = specificity_NOEM_ELEV ,
+    specificity_NOEM_NOELEV = specificity_NOEM_NOELEV
+  )
+  
+  # SENSI
+  sp2 = data.frame(
+    sensitivity_EM_ELEV = sensitivity_EM_ELEV,
+    sensitivity_EM_NOELEV = sensitivity_EM_NOELEV,
+    sensitivity_NOEM_ELEV = sensitivity_NOEM_ELEV,
+    sensitivity_NOEM_NOELEV = sensitivity_NOEM_NOELEV
+  )
+  # TSS
+  sp3 = data.frame(
+    TSS_EM_ELEV = ( sensitivity_EM_ELEV + specificity_EM_ELEV - 1),
+    TSS_EM_NOELEV = sensitivity_EM_NOELEV + specificity_EM_NOELEV - 1,
+    TSS_NOEM_ELEV = sensitivity_NOEM_ELEV + specificity_NOEM_ELEV - 1,
+    TSS_NOEM_NOELEV = sensitivity_NOEM_NOELEV + specificity_NOEM_NOELEV - 1
+  )
+  
+  # FAR: FA / FA + TP
+  sp4 = data.frame(
+    FAR_EM_ELEV = sp_tmp[8] / (sp_tmp[5] + sp_tmp[8]),
+    FAR_EM_NOELEV = sp_tmp[4] / (sp_tmp[1] + sp_tmp[4]),
+    FAR_NOEM_ELEV = sp_tmp[16] / (sp_tmp[13] + sp_tmp[16]),
+    FAR_NOEM_NOELEV = sp_tmp[12] / (sp_tmp[9] + sp_tmp[12])
+  )
+  
+  # FPR = FP / FP + TA
+  sp5 = data.frame(
+    FPR_EM_ELEV = sp_tmp[7] / (sp_tmp[6] + sp_tmp[7]),
+    FPR_EM_NOELEV = sp_tmp[3] / (sp_tmp[2] + sp_tmp[3]),
+    FPR_NOEM_ELEV = sp_tmp[15] / (sp_tmp[14] + sp_tmp[15]),
+    FPR_NOEM_NOELEV = sp_tmp[11] / (sp_tmp[10] + sp_tmp[11])
+  )
+  
+  a <- ggplot(data = melt(sp1), aes(x=variable, y=value)) + geom_point()+theme_classic()+ggtitle(paste0( 'Specificity ', species))
+  ggsave(filename=paste0(outdir,species,  "_specificity.pdf"), plot=a)
+  b <- ggplot(data = melt(sp2), aes(x=variable, y=value)) + geom_point()+theme_classic()+ggtitle(paste0( 'Sensitivity ', species))
+  ggsave(filename=paste0(outdir,species,  "_sensitivity.pdf"), plot=b)
+  c <- ggplot(data = melt(sp3), aes(x=variable, y=value)) + geom_point()+theme_classic()+ggtitle(paste0( 'True Skill Statistic\n ', species))
+  ggsave(filename=paste0(outdir,species,  "_TSS.pdf"), plot=c)
+  d <- ggplot(data = melt(sp4), aes(x=variable, y=value)) + geom_point()+theme_classic()+ggtitle(paste0( 'False Absence Rate\n ', species))
+  ggsave(filename=paste0(outdir,species,  "_FAR.pdf"), plot=d)
+  e <- ggplot(data = melt(sp5), aes(x=variable, y=value)) + geom_point()+theme_classic()+ggtitle(paste0( 'False Presence Rate\n ', species))
+  ggsave(filename=paste0(outdir,species,  "_FPR.pdf"), plot=e)
+}
+# --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+# Load all .csv files in a folder into one data frame
+species = 'Eriocnemis_vestita'
+df = data.cat
+outdir = '/Users/diegoellis/Desktop/Inventory_sp_list/Single_species_plots/'
+
+
+for( i in 1:length(unique(data.cat$Species))){
+  species = unique(data.cat$Species)[i]
+ plot_TSS_FPR_FAR_KAPPA_per_species(species, data.cat, outdir)
+ print(species)
+}
+
+
+
+# sp_hum1 = sp2
+# ggplot(data = melt(sp2), aes(x=variable, y=value)) +
+#   geom_point()+ # aes(fill=variable), if i want colors
+#   scale_color_grey()+theme_classic()+
+#   scale_x_discrete(labels = c('EM_Elev','EM_NOELEV','NOEM_ELEV', 'NOEM_NOELEV'))+
+#   ggtitle('Eriocnemis_vestita\nTrue skill statistic')+
+# theme(plot.title = element_text(size = 18, face = "italic"),
+#          element_line(colour = "black", size = 1, linetype = "solid"),
+#          axis.title.y = element_text(face = 'bold'),
+#          axis.title.x = element_text(face = 'bold'),
+#          axis.text = element_text(face = 'bold'))+xlab('SDM Type')+ stat_summary(fun.data=data_summary, col =  'red')+
+#   theme(legend.position="none")# +theme(axis.text.x=element_text(angle=90, hjust=1))
+# 
+# 
+# ggplot(data = melt(sp2), aes(x=variable, y=value)) + geom_col(position = 'dodge')+theme_classic()+ylim(0.4,0.5)
+# 
+# 
+# 
+# Oreotrochilus_leucopterus = data.cat %>% subset(Species == 'Oreotrochilus_leucopterus')
+# 
+# 
+# data_summary <- function(x) {
+#   m <- mean(x)
+#   ymin <- m-sd(x)
+#   ymax <- m+sd(x)
+#   return(c(y=m,ymin=ymin,ymax=ymax))
+# }
+# 
