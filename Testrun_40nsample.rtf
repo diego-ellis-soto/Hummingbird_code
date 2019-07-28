@@ -1,0 +1,299 @@
+{\rtf1\ansi\ansicpg1252\cocoartf1504\cocoasubrtf830
+{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww10800\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 if(Sys.info()['user']=='diegoellis') \{\
+  rm(list=ls())\
+  library(devtools)\
+  library(cmsdm)\
+  library(MOLSDM)\
+  startUpSDM()\
+  sampleDir='/Users/diegoellis/Desktop/Hummingbirds/v39_subsampling_points/'\
+  if(!file.exists(sampleDir) )\{  dir.create(sampleDir)\}\
+  mySpeciesDir=file.path('/Users/diegoellis/Dropbox/Diego_Cory_Walter/Hummingbirds_AccuratePts_4_9_18/Inputs/Only_accurate_points/Points/')\
+  EnvDir = '/Users/diegoellis/Dropbox/Diego_Cory_Walter/Hummingbirds_AccuratePts_4_9_18/Inputs/Env/'\
+  ShpDir = '/Users/diegoellis/Dropbox/Diego_Cory_Walter/Hummingbirds_AccuratePts_4_9_18/Inputs/Only_accurate_points/Shapefile/'\
+  RasterDir = '/Users/diegoellis/Dropbox/Diego_Cory_Walter/Hummingbirds_AccuratePts_4_9_18/Inputs/Only_accurate_points/CorrectedRasters/'\
+  elevation_path <- '/Users/diegoellis/Dropbox/Diego_Cory_Walter/Hummingbirds_AccuratePts_4_9_18/Inputs/Misc/'\
+  outpath = paste0('/Users/diegoellis/Desktop/Hummingbirds/TEST/')\
+  \
+  species = gsub('.csv', '', list.files(mySpeciesDir))\
+  species <- species[c(8,12,16)]# species[c('Heliangelus_exortis', 'Oreotrochilus leucopleurus')]\
+  speciesList <- species\
+  outdir = outpath\
+  # outpath = sampleDir  ; outdir = outpath\
+  speciesCSV_dir = mySpeciesDir\
+  nsamples = c(75, 60,50, 40, 25, 10)\
+  path_to_elevation_CSV_details <- '/Users/diegoellis/Desktop/Hummingbirds/Elevation_subsampled_hummingbirds.csv'\
+  # path_to_elevation_CSV_details <- '/Users/diegoellis/Desktop/Hummingbirds/v39_elevation_subsampling/'\
+\}\
+########################################################################################################################################################\
+x <- 40\
+set.seed(2)\
+  if(!file.exists(paste0(outpath,'/nsamples_', x)))\{dir.create(paste0(outpath,'/nsamples_', x))\}\
+  path_to_species_dir = file.path(paste0(outpath,'/nsamples_', x, "/", x ,'_points'))\
+  who <- x # print(x)\
+  message(paste0("[1] Sample ", x, " point ocurrences for all selected species"))\
+  message("Make a unique folder for each nsample and store species .csv in each respectively")\
+  sampleDir=paste0(outpath,'/nsamples_',x, '/') # x <- who\
+  if(!file.exists(sampleDir))\{dir.create(sampleDir)\}\
+  if(!file.exists(paste0(sampleDir, "/domains"))) dir.create(paste0(sampleDir, "/domains"))\
+  if(!file.exists(paste0(sampleDir, "/rDists"))) dir.create(paste0(sampleDir, "/rDists"))\
+  if(!file.exists(paste0(sampleDir, "/Expert_Shp"))) dir.create(paste0(sampleDir, "/Expert_Shp"))\
+  if(!file.exists(paste0(sampleDir, "/", x ,"_points"))) dir.create(paste0(sampleDir, "/", x ,"_points"))\
+  # Create a point folder inside of eahc of these nsample folders. We store our species.csv here. We repeat species.csv random sampling a ttoal of 10 times for each species.\
+  if(!file.exists(paste0(sampleDir, '/Points/'  )))\{dir.create(paste0(sampleDir, '/Points/'  ))\}\
+  if(!file.exists(paste0(sampleDir, '/Shapefile/'  )))\{dir.create(paste0(sampleDir, '/Shapefile/'  ))\}\
+  if(!file.exists(paste0(sampleDir, '/Raster/'  )))\{dir.create(paste0(sampleDir, '/Raster/'  ))\}\
+  \
+  lapply(speciesList, function(y)\{\
+    # y <- species[1]\
+    message("Sampling ", x, " points for ", y)\
+    pres=read.csv(paste0(speciesCSV_dir, y, '.csv'), row.names = NULL)[,c('lon', 'lat')]\
+    pres <- unique(pres)\
+    message(y, " has a total of ",nrow(unique(pres)), " ocurrences")\
+    message('Copy each species 10 times for spatial stratification. Repeat for each of our unique sample sizes:')\
+    # if(nrow(pres) > x)\{ \
+      for(replicates in 1:10)\{\
+        data.xy <- pres\
+        pdf <- SpatialPointsDataFrame(coords = data.xy, data = pres, proj4string = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +towgs84=0,0,0"))\
+        elev <- stack(paste0('/Users/diegoellis/Dropbox/Diego_Cory_Walter/Hummingbirds_AccuratePts_4_9_18/Inputs/Misc/elevation.tif')  )\
+        proj <- proj4string(elev)\
+        pdf <- spTransform(pdf, proj)\
+        pdf$max_elevation <- raster::extract(elev[[1]], pdf)\
+        pdf$min_elevation <- raster::extract(elev[[2]], pdf)\
+        pdf_df <- as.data.frame(pdf)  \
+        sub <- pdf_df[quantile(pdf_df$max_elevation,as.numeric(paste0('.',x))) <= pdf_df$max_elevation , ] \
+        sub <- sub[,c('lon', 'lat')]\
+        write.csv(   sub, file = paste0(sampleDir, '/Points/', y, '_', x, '_', replicates ,'.csv'), row.names=FALSE )\
+        # sam=sample(nrow(pres), as.integer(x), replace=FALSE ) # x is the subsampling i want defined in sapply\
+        # write.csv(   pres[sam,], file = paste0(sampleDir, '/Points/', y, '_', x, '_', replicates ,'.csv'), row.names=FALSE )\
+        file.copy( paste0(ShpDir, y, '.shp'),paste0(sampleDir, '/Shapefile/', y, '_', x, '_', replicates, '.shp'))\
+        file.copy( paste0(ShpDir, y, '.shx'),paste0(sampleDir, '/Shapefile/', y, '_', x, '_', replicates, '.shx'))\
+        file.copy( paste0(ShpDir, y, '.dbf'),paste0(sampleDir, '/Shapefile/', y, '_', x, '_', replicates, '.dbf'))\
+        file.copy( paste0(ShpDir, y, '.prj'),paste0(sampleDir, '/Shapefile/', y, '_', x, '_', replicates, '.prj'))\
+        file.copy( paste0(ShpDir, y, '.cpg'),paste0(sampleDir, '/Shapefile/', y, '_', x, '_', replicates, '.cpg'))\
+        # Copy Raster\
+        file.copy( paste0(RasterDir, y, '.tif'),paste0(sampleDir, '/Raster/', y, '_', x, '_', replicates, '.tif'))\
+      \} # end of for loop\
+  #  \}else\{ \
+  #    print(paste0(y, ' has not enough datapoints for subsampling a total of ', x, ' points'))\
+  #  \}\
+  \} # lapply end\
+  ) # end of lapply(species, function(y)\{ \
+  message("[2] Make a runName and a separate workflow for each of these nsample sizes")\
+  domains_path <- paste0(sampleDir, "/domains")\
+  rDists_path <- paste0(sampleDir, "/rDists")\
+  rangePolyDir_path <- paste0(sampleDir, "/Expert_Shp")\
+  runName=paste0("Elevation_influence_sample_size_", x)\
+  baseDir = paste0(sampleDir, runName, '_inputs')\
+  mySpeciesDir = paste0(sampleDir,'/Points/') # I want the folder I just made a while ago in the for loop wher emy data is.\
+  myEnvDir = EnvDir\
+  myOffsetDirs = paste0(sampleDir,'/Raster/')\
+  myRangePolyDir = paste0(sampleDir,'/Shapefile/')\
+  \
+  mySamplingModelDir=NULL #'~/Dropbox/Projects/MoL/Palms/data/Sampling_Models'\
+  otherDirs =list(\
+    rangePolyDir=paste0(baseDir,'/Expert_Shp'),\
+    rdistDir=paste0(baseDir,'/rDists'),\
+    domains=paste0(baseDir,'/domains'))\
+  myCustomBackgroundDir=NULL\
+  myCustomBackgroundTable= NULL \
+  myOtherEnvDir= NULL\
+  sortDirNames=c('Points_Only','Points_Expert','Points1_5_Expert', 'Points1_5_Only','Points5_19_Only','Points5_19_Expert')\
+  offsetDataDirNames=c('Expert_Maps')\
+  mySamplingModelDir=NULL\
+  mySamplingDataDirNames=NULL\
+  mySamplingDataDir=NULL\
+  samplingDataDirNames=NULL\
+  family='Hummingbird'\
+  # \})\
+  message("[3] Create the directory")  \
+  \
+  myOtherInputs=list(myElevationPreferenceFile = \
+                       # paste0(elevation_path, 'MOL_Refinements/MOL_Input_Spec_Elevation_050317.csv'),\
+                       path_to_elevation_CSV_details,\
+                     myElevationRaster = paste0(elevation_path, '/elevation.tif') )\
+  \
+  \
+  \
+  allBaseDirs=sdmDirectories(baseDir,\
+                             warn=FALSE,\
+                             mySpeciesDir=mySpeciesDir,\
+                             myEnvDir=myEnvDir,\
+                             myOffsetDirs=myOffsetDirs,\
+                             mySamplingDataDir=mySamplingDataDir,\
+                             mySamplingModelDir=mySamplingModelDir,\
+                             myOtherEnvDir=myOtherEnvDir,\
+                             myCustomBackgroundDir=myCustomBackgroundDir,\
+                             myCustomBackgroundTable=myCustomBackgroundTable,\
+                             myOtherInputs=myOtherInputs,\
+                             myRangePolyDir=myRangePolyDir,\
+                             offsetDataDirNames=offsetDataDirNames,\
+                             samplingDataDirNames=NULL,\
+                             overwrite=FALSE,\
+                             sortDirNames=sortDirNames,\
+                             otherDirs=otherDirs)\
+  \
+  preprocessing=TRUE#  do only once\
+  initial.setup=TRUE # only set to TRUE if this is the first time setting up a run\
+  \
+  message("[4] Load environmental variables")\
+  \
+  makeThisData=function(allBaseDirs,myOtherEnvDir,baseDir)\{\
+    myprj = "+proj=laea +lat_0=15 +lon_0=-80 +x_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs +towgs=0,0,0"\
+    outFile=paste0(allBaseDirs$miscDir,'/expert_elevation.csv')\
+    if(!file.exists(outFile))\{\
+      er=read.csv( allBaseDirs$otherInputs$myElevationPreferenceFile ,stringsAsFactors=F)\
+      speciesList=list.files(paste0(mySpeciesDir),full.names=T)\
+      keep=match(tools::file_path_sans_ext(basename(speciesList)),er$species)\
+      result=er[keep,]\
+      result=result[complete.cases(result),]\
+      write.csv(result[,3:5], file=paste0(allBaseDirs$miscDir,'/expert_elevation.csv'),row.names=FALSE)\
+      print('created expert elevation input')\
+    \}\
+    outFile=paste0(allBaseDirs$envDir,'/Resampled_chelsa.tif')\
+    if(!file.exists(outFile))\{\
+      file.copy(list.files(myEnvDir,full.names=T), outFile)  \
+    \}\
+    env=raster::stack(paste0(allBaseDirs$envDir,'/Resampled_chelsa.tif'))\
+    print('loaded env raster')\
+    #== elevation layers\
+    outFile=paste0(allBaseDirs$miscDir,'/elevation.tif') \
+    if(!file.exists(outFile))\{\
+      file.copy(allBaseDirs$otherInputs$myElevationRaster, outFile)   \
+      print('prepped elevation rasters')\
+    \}\
+    ## shapefile for plotting\
+    world.shp=readOGR(system.file( "extdata/TM_WORLD_BORDERS_SIMPL-0.3/TM_WORLD_BORDERS_SIMPL-0.3.shp",package='MOLSDM'),'TM_WORLD_BORDERS_SIMPL-0.3',verbose=F)\
+    world.shp=spTransform(world.shp,projection(env))\
+    print('loaded world shapefile')\
+    \
+    template.file=paste0(allBaseDirs$tmpDir,'/templateRaster.tif')\
+    if(!file.exists(template.file))\{\
+      template=!is.na(env[[1]])\
+      template[template==0]=NA\
+      template[template==1]=0\
+      writeRaster(template,template.file,options = c("COMPRESS=LZW", "PREDICTOR=2"),datatype = "INT2S", overwrite = TRUE )\
+      ## plot(template)\
+      print('wrote env template')\
+    \}\
+    \
+    return(list(world.shp=world.shp,myprj=myprj))\
+    \
+  \}\
+  mtd=makeThisData(allBaseDirs,myOtherEnvDir,baseDir)\
+  myprj=mtd$myprj; world.shp=mtd$world.shp\
+  save(allBaseDirs,file=paste0(baseDir,'/allBaseDirs.rdata'))\
+  # --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---\
+  message("Finished preprocessing the data, next step sortspecies")\
+  message("[5] Sort species")\
+  sortDone=checkSortDone(allBaseDirs, deleteSorted=FALSE)\
+  pointsProj=myprj\
+  redoSort = TRUE\
+  if(redoSort)\{\
+    sortSpeciesMOL(allBaseDirs,\
+                   pointsProj=CRS('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs'),\
+                   myprj=myprj,\
+                   verbose=TRUE,\
+                   overwrite=FALSE,\
+                   doClean=TRUE,\
+                   doThin=FALSE,\
+                   doParallel=FALSE)\
+  \}\
+  speciesList = c(list.files(file.path(allBaseDirs$speciesDir,'Points5_19_Expert'), full.names=T),\
+                  list.files(file.path(allBaseDirs$speciesDir,'Points_Expert'),full.names=T))\
+  #  \}\
+  done=checkSDMDone(allBaseDirs,speciesList,checkFigs=T)\
+  speciesList=done$notRun\
+  \
+  \
+  message("[6] Prepare model settings")\
+  modelSettings=list()\
+  modelSettings$samplingSettings=c('noBias')#,'targetBG')\
+  modelSettings$predictorSettings=NULL\
+  modelSettings$regularizationSettings=NULL\
+  modelSettings$priorSettings=NULL\
+  modelSettings$backgroundSettings=NULL\
+  modelSettings$algorithmSettings=c('maxnet')\
+  modelSettings$elevationSettings=c('none','elevation')\
+  #== use this for no expert map\
+  #modelSettings$expertSettings=list(prob=1e-6,rate=0,skew=1e-6,shift=0)\
+  modelSettings$expertSettings=list(\
+    prob=c('mean','lo','hi'),#,'hi','lo'),\
+    rate=c(.025,.05), # corresponds to jerk =100, 50\
+    skew=0.2,\
+    shift=0,\
+    complete=rbind(c(1e-6,0,1e-6,0)))\
+  \
+  modelSettings$formulaMaker="sdmGenericFormulas"\
+  modelSettings$maxTime=300 # time for an individual call to glmnet()\
+  modelSettings$samplingModel='none'\
+  myprj = "+proj=laea +lat_0=15 +lon_0=-80 +x_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs +towgs=0,0,0"\
+  world.shp=readOGR(system.file( "extdata/TM_WORLD_BORDERS_SIMPL-0.3/TM_WORLD_BORDERS_SIMPL-0.3.shp",package='MOLSDM'),'TM_WORLD_BORDERS_SIMPL-0.3',verbose=F)\
+  world.shp <- spTransform(world.shp, CRS(myprj))\
+  source( '/Users/diegoellis/Downloads/MOLSDM-master-5/Demo_Workflow/Common_MoL_Settings_v1.r')\
+  cms=commonMOLSettings(myprj,world.shp)\
+  toDo=cms$toDo\
+  toSave=cms$toSave\
+  toOverwrite=cms$toOverwrite\
+  #MAKE THE BUFFER WORK AROUND THE EXPERT MAP + POINTS!!\
+  toSave$modelObj=TRUE\
+  toSave$rdist=TRUE\
+  toDo$biasMask=FALSE\
+  toDo$rangeDistFactor=10\
+  toDo$maxTrimDomainTime=60\
+  toDo$trimOnlyByPoints=FALSE\
+  toDo$trimBufferkm=1000\
+  toDo$userProbSetOnly=FALSE\
+  toDo$trinaryMap=FALSE # toDo$trinaryMap=TRUE # Set it to FALSE\
+  toDo$makeBiasedBackground=FALSE\
+  toDo$runFullModel=FALSE\
+  toDo$runCVModels=TRUE\
+  toDo$otherEnvProjections=FALSE\
+  toDo$plotOtherEnvPred=FALSE\
+  toDo$thresholding=TRUE\
+  toDo$thresholds=c('TP01','TP10')\
+  toDo$makeThresholdMaps=c('TP01')\
+  toDo$mapLowThreshold=c('TP01')\
+  toDo$findBestModel=TRUE\
+  toDo$whichFutures='all' #c('he') # put anything here you could grep from the scenario\
+  toDo$whichFuturesToPlot='all' #'all' # put anything here you could grep from the scenario\
+  toDo$plotOtherEnvPred=FALSE\
+  toDo$openFig=FALSE\
+  toDo$domainClumpDist=1e9 #units are meters\
+  toOverwrite$rangeDist=FALSE\
+  \
+  \
+  # DO THE SAME BUT ALSO WITHOUT JUST THE CLEAN DATA!!!!\
+  # PUT ON THE HPC AND DO A BUNCH OF FOR LOOPS\
+  # DO RARITY MAP OF AFRICA!\
+  \
+  # THIS IS THE ALTERNATIVE speciesList=list.files(file.path(allBaseDirs$speciesDir,'Points5_19_Expert'),full.names=T)\
+  message("[7] Model run")\
+  # for(j in 1:length(speciesList))\{\
+    for(j in 14:length(speciesList))\{\
+    # j <- 11\
+    workflowMOL(speciesCSV=speciesList[j],\
+                allBaseDirs,\
+                modelSettings=modelSettings,\
+                toDo=toDo,\
+                toSave=toSave,\
+                toOverwrite=toOverwrite)\
+  \}\
+  message("Done with running the workflow on sample sizes of ", x)\
+\}\
+)\
+\
+# \}# Possible end of function that runs the sapply\
+# )   # end of lapply(nsamples, function(x)\{\
+# end of lapply(nsamples, function(x)\{\
+subsampled_workflowMOL(outpath = outdir, nsamples = c(60, 40, 25),\
+                       speciesList = speciesList, speciesCSV_dir = speciesCSV_dir, \
+                       EnvDir = EnvDir, ShpDir = ShpDir, RasterDir = RasterDir, elevation_path = elevation_path)\
+\
+\
+}
